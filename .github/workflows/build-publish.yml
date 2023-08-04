@@ -9,18 +9,15 @@ jobs:
     steps:
         - name: Check out everest-utils
           uses: actions/checkout@v3
-          with:
-            repository:  EVerest/everest-utils
-            path: everest-utils
+        #   with:
+        #     repository: EVerest/everest-utils
+        #     path: everest-utils
         - name: Set up Docker Buildx
           uses: docker/setup-buildx-action@v2
-        - run: find -name Dockerfile
         - name: Build and push
           uses: docker/build-push-action@v4
           with:
-            file: $GITHUB_WORKSPACE/everest-utils/docker/everest-docker-image/Dockerfile
             build-args: |
               REPO=https://github.com/EVerest/everest-core.git
               BRANCH=main
-        - run: find -name Dockerfile
         
