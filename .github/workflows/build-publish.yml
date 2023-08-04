@@ -1,6 +1,7 @@
 name: Build everest
 on:
     workflow_dispatch:
+    push:
 
 jobs:
   build:
@@ -17,7 +18,7 @@ jobs:
         - name: Build and push
           uses: docker/build-push-action@v4
           with:
-            file: ./everest-utils/docker/everest-docker-image/Dockerfile
+            file: docker/everest-docker-image/Dockerfile
             build-args: |
               REPO=https://github.com/EVerest/everest-core.git
               BRANCH=main
