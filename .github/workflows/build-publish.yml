@@ -18,7 +18,9 @@ jobs:
         - name: Build and push
           uses: docker/build-push-action@v4
           with:
-            file: docker/everest-docker-image/Dockerfile
+            file: $GITHUB_WORKSPACE/everest-utils/docker/everest-docker-image/Dockerfile
             build-args: |
               REPO=https://github.com/EVerest/everest-core.git
               BRANCH=main
+        - run: find -name Dockerfile
+        
