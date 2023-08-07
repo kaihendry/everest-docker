@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM debian:stable AS builder
+FROM debian:11 AS builder
 
 ARG REPO
 ARG BRANCH
@@ -18,7 +18,7 @@ RUN apt-get update \
     cppcheck \
     libboost-all-dev \
     maven \
-    default-jdk \
+    openjdk-11-jdk \
     nodejs \
     npm \
     libsqlite3-dev \
@@ -30,9 +30,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace/everest
-
-# to avoid caching
-ARG BUILD_DATE=Unknown
 
 # add github to known hosts
 RUN mkdir ~/.ssh
@@ -68,11 +65,11 @@ RUN rm -rf "/workspace/everest/$(basename "${REPO}" .git)/build" && \
 COPY logging.ini /opt/everest/config
 
 # syntax=docker/dockerfile:1
-FROM debian:stable-slim
+FROM debian:11-slim
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
-    default-jre \
+    openjdk-11-jre \
     nodejs \
     npm \
     python3-pip \
@@ -81,7 +78,7 @@ RUN apt-get update \
     libboost-log1.74.0 \
     libboost-chrono1.74.0 \
     libboost-system1.74.0 \
-    libssl3 \
+    libssl1.1 \
     libcurl4 \
     less \
     && apt-get clean \
