@@ -18,7 +18,7 @@ RUN apt-get update \
     cppcheck \
     libboost-all-dev \
     maven \
-    openjdk-11-jdk \
+    default-jdk \
     nodejs \
     npm \
     libsqlite3-dev \
@@ -72,7 +72,7 @@ FROM debian:stable-slim
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
-    openjdk-11-jre \
+    default-jre \
     nodejs \
     npm \
     python3-pip \
@@ -81,7 +81,7 @@ RUN apt-get update \
     libboost-log1.74.0 \
     libboost-chrono1.74.0 \
     libboost-system1.74.0 \
-    libssl1.1 \
+    libssl3 \
     libcurl4 \
     less \
     && apt-get clean \
