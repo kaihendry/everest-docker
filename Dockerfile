@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM debian:11 AS builder
+FROM debian:stable AS builder
 
 ARG REPO
 ARG BRANCH
@@ -68,7 +68,7 @@ RUN rm -rf "/workspace/everest/$(basename "${REPO}" .git)/build" && \
 COPY logging.ini /opt/everest/config
 
 # syntax=docker/dockerfile:1
-FROM debian:11-slim
+FROM debian:stable-slim
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
