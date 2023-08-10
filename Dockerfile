@@ -28,9 +28,6 @@ RUN apt-get update \
 
 WORKDIR /workspace/everest
 
-# add github to known hosts
-RUN mkdir ~/.ssh && ssh-keyscan github.com > ~/.ssh/known_hosts
-
 RUN mkdir -p /workspace/everest/cpm_source_cache
 ENV CPM_SOURCE_CACHE="/workspace/everest/cpm_source_cache"
 
@@ -48,7 +45,7 @@ RUN git clone https://github.com/EVerest/ext-switchev-iso15118.git
 WORKDIR /workspace/everest
 
 RUN rm -rf "/workspace/everest/everest-core"
-RUN --mount=type=ssh git clone https://github.com/EVerest/everest-core.git
+RUN git clone https://github.com/EVerest/everest-core.git
 
 RUN --mount=type=cache,target=/workspace/everest/everest-core/build \
     --mount=type=cache,target=/workspace/everest/cpm_source_cache \
@@ -75,10 +72,7 @@ RUN apt-get update \
     openssh-client \
     nodejs
 
-# add github to known hosts
-RUN mkdir ~/.ssh && ssh-keyscan github.com > ~/.ssh/known_hosts
-
-RUN --mount=type=ssh git clone git@github.com:EVerest/everest-admin-panel.git \
+RUN git clone https://github.com/EVerest/everest-admin-panel.git \
     && cd /workspace/everest/everest-admin-panel \
     && npm install \
     && npm run build
