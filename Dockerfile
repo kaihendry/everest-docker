@@ -1,9 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM debian:11 AS builder
 
-ARG REPO
-ARG BRANCH
-
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
     git \
@@ -32,8 +29,7 @@ RUN apt-get update \
 WORKDIR /workspace/everest
 
 # add github to known hosts
-RUN mkdir ~/.ssh
-RUN ssh-keyscan github.com > ~/.ssh/known_hosts
+RUN mkdir ~/.ssh && ssh-keyscan github.com > ~/.ssh/known_hosts
 
 RUN mkdir -p /workspace/everest/cpm_source_cache
 ENV CPM_SOURCE_CACHE="/workspace/everest/cpm_source_cache"
@@ -51,38 +47,73 @@ RUN git clone https://github.com/EVerest/ext-switchev-iso15118.git
 
 WORKDIR /workspace/everest
 
-RUN rm -rf "/workspace/everest/$(basename "${REPO}" .git)"
-RUN --mount=type=ssh git clone ${REPO}
+RUN rm -rf "/workspace/everest/everest-core"
+RUN --mount=type=ssh git clone https://github.com/EVerest/everest-core.git
 
-RUN rm -rf "/workspace/everest/$(basename "${REPO}" .git)/build" && \
-    cd "/workspace/everest/$(basename "${REPO}" .git)" && \
-    git checkout "${BRANCH}" && \
-    mkdir "/workspace/everest/$(basename "${REPO}" .git)/build" && \
-    cd "/workspace/everest/$(basename "${REPO}" .git)/build" && \
+RUN --mount=type=cache,target=/workspace/everest/everest-core/build \
+    --mount=type=cache,target=/workspace/everest/cpm_source_cache \
+    mkdir -p "/workspace/everest/everest-core/build" && \
+    cd "/workspace/everest/everest-core/build" && \
     cmake .. -DEVEREST_BUILD_ALL_MODULES=ON -DCMAKE_INSTALL_PREFIX=/opt/everest && \
     make -j"$(nproc)" install
 
+RUN mkdir -p /opt/everest/config/user-config
 COPY logging.ini /opt/everest/config
 
 # syntax=docker/dockerfile:1
+FROM debian:11 AS admin-builder
+
+WORKDIR /workspace/everest
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+    git \
+    openssh-client \
+    nodejs
+
+# add github to known hosts
+RUN mkdir ~/.ssh && ssh-keyscan github.com > ~/.ssh/known_hosts
+
+RUN --mount=type=ssh git clone git@github.com:EVerest/everest-admin-panel.git \
+    && cd /workspace/everest/everest-admin-panel \
+    && npm install \
+    && npm run build
+
+# syntax=docker/dockerfile:1
 FROM debian:11-slim
+ARG TARGETARCH
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
     openjdk-11-jre \
     nodejs \
-    npm \
     python3-pip \
     sqlite3 \
     libboost-program-options1.74.0 \
     libboost-log1.74.0 \
     libboost-chrono1.74.0 \
     libboost-system1.74.0 \
+    libevent-2.1-7 \
+    libevent-pthreads-2.1-7 \
     libssl1.1 \
     libcurl4 \
     less \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    patch
+
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        apt-get install --no-install-recommends -y gcc python3-dev ; \
+        fi;
+
+RUN apt-get clean \
+        && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/everest/ext-switchev-iso15118/requirements.txt ./
 RUN pip install --user -r requirements.txt
@@ -90,4 +121,11 @@ RUN pip install --user -r requirements.txt
 WORKDIR /opt/everest
 COPY --from=builder /opt/everest ./
 
-CMD [ "/opt/everest/bin/manager", "--conf", "/opt/everest/config/config.yaml" ]
+COPY --from=admin-builder /workspace/everest/everest-admin-panel/dist admin/
+
+RUN npm install -g serve
+
+RUN pip install supervisor
+COPY supervisord.conf ./
+
+CMD [ "supervisord" ]
