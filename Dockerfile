@@ -1,125 +1,84 @@
 # syntax=docker/dockerfile:1
-FROM debian:11 AS builder
+FROM debian:11.7-slim
+
+ARG EXT_MOUNT=/ext
+ARG EVEREST_CMAKE_PATH=/usr/lib/cmake/everest-cmake
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
-    git \
-    rsync \
-    wget \
-    cmake \
-    doxygen \
-    graphviz \
-    build-essential \
-    clang-format \
-    clang-tidy \
-    cppcheck \
-    libboost-all-dev \
-    maven \
-    openjdk-11-jdk \
-    nodejs \
-    npm \
-    libsqlite3-dev \
-    python3-pip \
-    libssl-dev \
-    libcurl4-openssl-dev \
-    libpcap-dev \
-    && apt-get clean \
+        # basic command line tools
+        git \
+        curl \
+        rsync \
+        # build tools
+        ninja-build \
+        make \
+        cmake \
+        # compilers
+        binutils \
+        gcc \
+        g++ \
+        # common dev libraries
+        #linux-headers \
+        # compiler tools
+        clang-tidy-13 \
+        ccache \
+        # python3 support
+        python3-pip
+
+# additional packages
+RUN apt-get install --no-install-recommends -y \
+        # required by some everest libraries
+        libboost-all-dev \
+        # required by libocpp
+        libsqlite3-dev \
+        libssl-dev \
+        # required by everest-framework
+        nodejs \
+        libnode-dev \
+        npm \
+        # required by packet sniffer module
+        pkg-config \
+        libpcap-dev \
+        # required by RiseV2G
+        maven
+
+# clean up apt
+RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace/everest
+# install ev-cli
+RUN python3 -m pip install git+https://github.com/EVerest/everest-utils@ebca0c6#subdirectory=ev-dev-tools
 
-RUN mkdir -p /workspace/everest/cpm_source_cache
-ENV CPM_SOURCE_CACHE="/workspace/everest/cpm_source_cache"
+# install everest-testing
+RUN python3 -m pip install git+https://github.com/EVerest/everest-utils@ebca0c6#subdirectory=everest-testing
 
-RUN git clone https://github.com/EVerest/everest-cmake.git
-RUN git clone https://github.com/EVerest/everest-utils.git
-WORKDIR /workspace/everest/everest-utils/ev-dev-tools
-RUN python3 -m pip install .
-WORKDIR /workspace/everest
-RUN git clone https://github.com/EVerest/everest-dev-environment.git
-WORKDIR /workspace/everest/everest-dev-environment/dependency_manager
-RUN python3 -m pip install .
-WORKDIR /workspace/everest
-RUN git clone https://github.com/EVerest/ext-switchev-iso15118.git
+# install edm
+RUN python3 -m pip install git+https://github.com/EVerest/everest-dev-environment@dbf310f#subdirectory=dependency_manager
 
-WORKDIR /workspace/everest
+# install everest-cmake
+RUN git clone https://github.com/EVerest/everest-cmake.git $EVEREST_CMAKE_PATH
 
-RUN rm -rf "/workspace/everest/everest-core"
-RUN git clone https://github.com/EVerest/everest-core.git
+RUN ( \
+    cd $EVEREST_CMAKE_PATH \
+    git checkout 329f8db \
+    rm -r .git \
+    )
 
-RUN --mount=type=cache,target=/workspace/everest/everest-core/build \
-    --mount=type=cache,target=/workspace/everest/cpm_source_cache \
-    mkdir -p "/workspace/everest/everest-core/build" && \
-    cd "/workspace/everest/everest-core/build" && \
-    cmake .. -DEVEREST_BUILD_ALL_MODULES=ON -DCMAKE_INSTALL_PREFIX=/opt/everest && \
-    make -j"$(nproc)" install
+# FIXME (aw): disable ownership check
+RUN git config --global --add safe.directory '*'
 
-RUN mkdir -p /opt/everest/config/user-config
-COPY logging.ini /opt/everest/config
+ENV WORKSPACE_PATH /workspace
+ENV ASSETS_PATH /assets
 
-# syntax=docker/dockerfile:1
-FROM debian:11 AS admin-builder
+RUN mkdir $ASSETS_PATH
+COPY maven-settings.xml $ASSETS_PATH/
 
-WORKDIR /workspace/everest
+ENV EXT_MOUNT $EXT_MOUNT
 
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y curl ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+COPY ./entrypoint.sh /
 
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y \
-    git \
-    openssh-client \
-    nodejs
+WORKDIR $WORKSPACE_PATH
 
-RUN git clone https://github.com/EVerest/everest-admin-panel.git \
-    && cd /workspace/everest/everest-admin-panel \
-    && npm install \
-    && npm run build
-
-# syntax=docker/dockerfile:1
-FROM debian:11-slim
-ARG TARGETARCH
-
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y curl ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y \
-    openjdk-11-jre \
-    nodejs \
-    python3-pip \
-    sqlite3 \
-    libboost-program-options1.74.0 \
-    libboost-log1.74.0 \
-    libboost-chrono1.74.0 \
-    libboost-system1.74.0 \
-    libevent-2.1-7 \
-    libevent-pthreads-2.1-7 \
-    libssl1.1 \
-    libcurl4 \
-    less \
-    patch
-
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        apt-get install --no-install-recommends -y gcc python3-dev ; \
-        fi;
-
-RUN apt-get clean \
-        && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /workspace/everest/ext-switchev-iso15118/requirements.txt ./
-RUN pip install --user -r requirements.txt
-
-WORKDIR /opt/everest
-COPY --from=builder /opt/everest ./
-
-COPY --from=admin-builder /workspace/everest/everest-admin-panel/dist admin/
-
-RUN npm install -g serve
-
-RUN pip install supervisor
-COPY supervisord.conf ./
-
-CMD [ "supervisord" ]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["run-script", "init"]
